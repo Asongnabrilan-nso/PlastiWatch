@@ -11,6 +11,7 @@ public:
     DisplayDriver();
     bool init();
     void showLogo();
+    void loading();
     void showActivity(ActivityClass activity, float batteryLevel);
     void turnOff();
     void turnOn();

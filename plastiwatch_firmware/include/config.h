@@ -18,6 +18,10 @@
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
 
+// OLED Variables
+#define FRAME_DELAY (5)
+#define FRAME_COUNT (sizeof(frames) / sizeof(frames[0]))
+
 // Task Priorities (Higher number = Higher priority)
 #define PRIORITY_SENSOR 3
 #define PRIORITY_AI 2
