@@ -2,7 +2,7 @@
 #include <Arduino.h>
 
 // Placeholder for Edge Impulse
-// #include <plastiwatch_inferencing.h>
+#include <motion-detection_inferencing.h>
 
 void aiTask(void *pvParameters) {
   SensorData data;
