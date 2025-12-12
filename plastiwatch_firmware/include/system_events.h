@@ -2,35 +2,35 @@
 
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
 #include <freertos/event_groups.h>
+#include <freertos/queue.h>
 
 // Data Structures
 struct SensorData {
-    float ax, ay, az;
-    float gx, gy, gz;
+  float ax, ay, az;
+  float gx, gy, gz;
 };
 
 enum ActivityClass {
-    ACTIVITY_IDLE,
-    ACTIVITY_WALKING,
-    ACTIVITY_RUNNING,
-    ACTIVITY_FALL
+  ACTIVITY_IDLE,
+  ACTIVITY_SNAKE,
+  ACTIVITY_UPDOWN,
+  ACTIVITY_WAVE
 };
 
 struct UIEvent {
-    enum Type {
-        UPDATE_ACTIVITY,
-        UPDATE_BATTERY,
-        BUTTON_SINGLE_CLICK,
-        BUTTON_DOUBLE_CLICK,
-        BUTTON_LONG_PRESS
-    } type;
-    
-    union {
-        ActivityClass activity;
-        float batteryLevel;
-    } data;
+  enum Type {
+    UPDATE_ACTIVITY,
+    UPDATE_BATTERY,
+    BUTTON_SINGLE_CLICK,
+    BUTTON_DOUBLE_CLICK,
+    BUTTON_LONG_PRESS
+  } type;
+
+  union {
+    ActivityClass activity;
+    float batteryLevel;
+  } data;
 };
 
 // Global Handles (defined in main.cpp)
