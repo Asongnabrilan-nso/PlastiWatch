@@ -159,21 +159,21 @@ void DisplayDriver::showActivity(ActivityClass activity, float batteryLevel)
     // Draw Activity
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
-    display.setCursor(25, 40);
+    display.setCursor(45, 50);
 
     switch (activity)
     {
     case ACTIVITY_IDLE:
-        display.println(F("NORMAL"));
+        display.println(F("normal"));
         break;
     case ACTIVITY_UPDOWN:
-        display.println(F("WALKING"));
+        display.println(F("walking"));
         break;
     case ACTIVITY_WAVE:
-        display.println(F("RUNNING"));
+        display.println(F("running"));
         break;
     case ACTIVITY_SNAKE:
-        display.println(F("FALL!"));
+        display.println(F("fall!"));
         break;
     }
     display.display();
