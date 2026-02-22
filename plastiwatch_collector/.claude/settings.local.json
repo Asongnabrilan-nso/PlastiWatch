@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pio run:*)",
+      "Bash(/c/Users/Surface7/.platformio/penv/Scripts/pio.exe run:*)",
+      "Bash(/c/Users/Surface7/.platformio/penv/Scripts/pio.exe device monitor -e seeed_xiao_esp32c3)"
+    ]
+  }
+}
