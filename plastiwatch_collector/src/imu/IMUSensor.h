@@ -32,6 +32,15 @@ public:
     /// @return true if the read succeeded; false on I2C error.
     bool readSample(IMUSample& out);
 
+    // -- Calibration ----------------------------------------------------------
+
+    /// Apply per-axis bias offsets computed during the startup calibration.
+    /// Offsets are subtracted from every subsequent readSample() call.
+    /// @param ax/ay/az  Accelerometer bias [m/s²]  (accZ offset keeps gravity)
+    /// @param gx/gy/gz  Gyroscope zero-rate bias [deg/s]
+    void setOffsets(float ax, float ay, float az,
+                    float gx, float gy, float gz);
+
     // -- Diagnostics ----------------------------------------------------------
 
     /// Read and print all relevant register values to Serial (INFO level).
@@ -56,6 +65,10 @@ private:
     // -- Scale factors (derived from Config.h FS settings) --------------------
     float m_accelScale;   ///< LSB → m/s²
     float m_gyroScale;    ///< LSB → deg/s
+
+    // -- Calibration offsets (set via setOffsets(), default = 0) --------------
+    float m_accelOffsets[3];  ///< Per-axis accel bias [m/s²]
+    float m_gyroOffsets[3];   ///< Per-axis gyro zero-rate bias [deg/s]
 
     // -- Low-level Wire helpers -----------------------------------------------
     bool     writeReg(uint8_t reg, uint8_t value) const;

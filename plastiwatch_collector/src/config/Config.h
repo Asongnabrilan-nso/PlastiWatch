@@ -49,8 +49,19 @@
 // -----------------------------------------------------------------------------
 #define SAMPLE_RATE_HZ          100     ///< IMU sampling frequency
 #define SAMPLE_INTERVAL_MS      (1000 / SAMPLE_RATE_HZ)
-#define COLLECTION_DURATION_S   5       ///< Seconds per labeled window
+
+/// Length of each labeled recording window.  Increase for longer captures.
+#define COLLECTION_DURATION_S   10      ///< Seconds per labeled window (10 s = 1000 samples)
 #define MAX_SAMPLES             (SAMPLE_RATE_HZ * COLLECTION_DURATION_S)
+
+/// Number of samples averaged during the startup IMU calibration.
+/// 200 samples × 10 ms = 2 s of calibration time.  Higher = more accurate.
+#define IMU_CALIB_SAMPLES       200
+
+/// Countdown duration before recording actually starts after a long-press.
+/// Must be a multiple of 1000 ms so the on-screen countdown shows whole seconds.
+/// Typical range: 1000–3000 ms.
+#define RECORDING_START_DELAY_MS  2000
 
 /// Activity labels — must match Edge Impulse project labels exactly
 #define NUM_ACTIVITY_LABELS     4

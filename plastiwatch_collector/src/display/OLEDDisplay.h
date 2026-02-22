@@ -55,6 +55,20 @@ public:
     /// Splash screen shown during boot initialisation.
     void showBoot();
 
+    /// Calibration prompt — instructs user to place device on a flat surface.
+    void showCalibrationReady();
+
+    /// Calibration in progress — @p progress is 0.0 (start) to 1.0 (done).
+    void showCalibrating(float progress);
+
+    /// Calibration complete — shown briefly before transitioning to IDLE.
+    void showCalibrationDone();
+
+    /// Pre-recording countdown — shown for each second of RECORDING_START_DELAY_MS.
+    /// @param label     Currently selected activity label.
+    /// @param secsLeft  Seconds remaining before recording begins (≥ 1).
+    void showRecordingCountdown(const char* label, uint32_t secsLeft);
+
     /// Idle state — waiting for user input.
     void showIdle(const char* label, bool wifiConnected, const char* ip);
 

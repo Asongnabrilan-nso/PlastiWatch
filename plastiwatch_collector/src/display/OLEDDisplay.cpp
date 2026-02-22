@@ -142,6 +142,106 @@ void OLEDDisplay::showBoot() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// showCalibrationReady()
+//
+//   y= 0  [INVERTED BAR]  "CALIBRATION"  (centered)
+//   y=14  size 1  "Place device on"  (centered)
+//   y=24  size 1  "a flat surface"   (centered)
+//   y=37  ─── separator ───
+//   y=41  size 1  "Press btn to"     (centered)
+//   y=51  size 1  "calibrate IMU"    (centered)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void OLEDDisplay::showCalibrationReady() {
+    if (!m_ready) return;
+    m_display.clearDisplay();
+
+    drawHeaderBar("CALIBRATION");
+
+    printCentered("Place device on",  14, 1);
+    printCentered("a flat surface",   24, 1);
+
+    m_display.drawFastHLine(0, 37, 128, SSD1306_WHITE);
+
+    printCentered("Press btn to",     41, 1);
+    printCentered("calibrate IMU",    51, 1);
+
+    m_display.display();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// showCalibrating()
+//
+//   y= 0  [INVERTED BAR]  "CALIBRATING"  (centered)
+//   y=14  progress bar (128 × 10 px)
+//   y=30  size 1  "Keep still!"       (centered)
+//   y=44  size 1  "Collecting data..."(centered)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void OLEDDisplay::showCalibrating(float progress) {
+    if (!m_ready) return;
+    m_display.clearDisplay();
+
+    drawHeaderBar("CALIBRATING");
+    drawProgressBar(0, 14, 128, 10, progress);
+
+    printCentered("Keep still!",        30, 1);
+    printCentered("Collecting data...", 44, 1);
+
+    m_display.display();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// showCalibrationDone()
+//
+//   y= 0  [INVERTED BAR]  "CALIBRATION OK"  (centered)
+//   y=20  size 1  "IMU calibrated!"  (centered)
+//   y=30  size 1  "Bias removed"     (centered)
+//   y=42  ─── separator ───
+//   y=47  size 1  "Starting..."      (centered)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void OLEDDisplay::showCalibrationDone() {
+    if (!m_ready) return;
+    m_display.clearDisplay();
+
+    drawHeaderBar("CALIBRATION OK");
+
+    printCentered("IMU calibrated!", 20, 1);
+    printCentered("Bias removed",    30, 1);
+
+    m_display.drawFastHLine(0, 42, 128, SSD1306_WHITE);
+
+    printCentered("Starting...", 47, 1);
+
+    m_display.display();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// showRecordingCountdown()
+//
+//   y= 0  [INVERTED BAR]  "GET READY"  |  label
+//   y=18  size 1  "Recording in:"  (centered)
+//   y=32  size 3  countdown digit  (centered, large)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void OLEDDisplay::showRecordingCountdown(const char* label, uint32_t secsLeft) {
+    if (!m_ready) return;
+    m_display.clearDisplay();
+
+    drawHeaderBar("GET READY", label);
+
+    printCentered("Recording in:", 18, 1);
+
+    // Large countdown number (size 3 = 18×24 px per character)
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%u", (unsigned)secsLeft);
+    printCentered(buf, 32, 3);
+
+    m_display.display();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // showIdle()
 //
 //   y= 0  [INVERTED BAR]  "IDLE"  |  "WiFi:OK" or "OFFLINE"

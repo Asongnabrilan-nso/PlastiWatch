@@ -17,13 +17,14 @@ Physical Motion → MPU6050 → ESP32C3 → WiFi → Edge Impulse Training Datas
 3. [Hardware Wiring](#hardware-wiring)
 4. [Software Setup](#software-setup)
 5. [Configure the Firmware](#configure-the-firmware)
-6. [Build and Flash](#build-and-flash)
-7. [Collecting Your First Data](#collecting-your-first-data)
-8. [Understanding the Display](#understanding-the-display)
-9. [Serial Monitor Commands](#serial-monitor-commands)
-10. [LED Status Guide](#led-status-guide)
-11. [Troubleshooting](#troubleshooting)
-12. [Code Deep Dive](#code-deep-dive)
+6. [User-Configurable Parameters](#user-configurable-parameters)
+7. [Build and Flash](#build-and-flash)
+8. [Collecting Your First Data](#collecting-your-first-data)
+9. [Understanding the Display](#understanding-the-display)
+10. [Serial Monitor Commands](#serial-monitor-commands)
+11. [LED Status Guide](#led-status-guide)
+12. [Troubleshooting](#troubleshooting)
+13. [Code Deep Dive](#code-deep-dive)
 
 ---
 
@@ -35,11 +36,12 @@ Follow these five steps to go from unboxed hardware to uploading your first data
 Step 1 → Wire up the hardware       (see Hardware Wiring)
 Step 2 → Edit Config.h              (WiFi credentials + Edge Impulse API key)
 Step 3 → Build and flash            (one click in VS Code / PlatformIO)
-Step 4 → Power on the device        (watch the OLED boot screen)
-Step 5 → Press button to pick label, then long-press (2 s) or type 'start' to record
+Step 4 → Power on → place flat → press button to calibrate IMU
+Step 5 → Press button to pick label, long-press (2 s) to start recording
 ```
 
-That's it. The device records 500 IMU samples and uploads them automatically.
+That's it. The device calibrates itself, then records 1000 IMU samples (10 s) and
+uploads them automatically.
 
 ---
 
@@ -52,7 +54,7 @@ That's it. The device records 500 IMU samples and uploads them automatically.
 | Seeed Studio XIAO ESP32C3 | The microcontroller board |
 | MPU6050 IMU module | 6-axis (accelerometer + gyroscope) |
 | SSD1306 OLED display (128×64) | I2C interface |
-| Tactile push button | Momentary, any size — short press cycles label; long press starts recording |
+| Tactile push button | Momentary — short press cycles label; long press starts recording |
 | Jumper wires | Female-to-female for breadboard |
 | Breadboard | Optional but recommended |
 | USB-C data cable | **Must support data** — charge-only cables won't work |
@@ -168,8 +170,59 @@ static const char* const ACTIVITY_LABELS[NUM_ACTIVITY_LABELS] = {
 > **Important:** The XIAO ESP32C3 supports **2.4 GHz Wi-Fi only**.
 > Make sure your router broadcasts a 2.4 GHz network.
 
-Everything else in `Config.h` has sensible defaults (100 Hz sample rate, 5-second
-windows) and can be left unchanged for your first session.
+Everything else in `Config.h` has sensible defaults and can be left unchanged for
+your first session. See the section below for a full list of tuneable parameters.
+
+---
+
+## User-Configurable Parameters
+
+All parameters live in `src/config/Config.h`. The table below highlights the ones
+most commonly adjusted for a data collection session.
+
+### Essential — edit before flashing
+
+| Parameter | Default | Description |
+|---|---|---|
+| `WIFI_SSID` | `"Hardware Community 2.4"` | Your 2.4 GHz WiFi network name |
+| `WIFI_PASSWORD` | *(set in file)* | Your WiFi password |
+| `EI_API_KEY` | *(set in file)* | Edge Impulse API key (Dashboard → Keys) |
+| `EI_DEVICE_NAME` | `"plastiwatch-001"` | Logical device name shown in Edge Impulse Studio |
+| `ACTIVITY_LABELS[]` | `standing, walking, running, falling` | Labels sent to Edge Impulse — must match your project exactly |
+| `NUM_ACTIVITY_LABELS` | `4` | Number of labels in the array above |
+
+### Data collection — tune to your experiment
+
+| Parameter | Default | Description |
+|---|---|---|
+| `COLLECTION_DURATION_S` | `10` | **Length of each recording window in seconds.** 10 s = 1000 samples at 100 Hz. Increase for longer windows; decrease for shorter ones. `MAX_SAMPLES` updates automatically. |
+| `SAMPLE_RATE_HZ` | `100` | IMU sampling frequency (Hz). 100 Hz is a good balance for activity recognition. |
+| `RECORDING_START_DELAY_MS` | `2000` | **Countdown before recording begins (ms) after a long-press.** A per-second countdown is shown on the OLED so you can get into position. Must be a multiple of 1000 ms. |
+| `IMU_CALIB_SAMPLES` | `200` | **Number of IMU samples averaged during the startup calibration.** 200 × 10 ms = 2 s of calibration. Higher values give more accurate bias removal but take longer. |
+
+### IMU sensor settings
+
+| Parameter | Default | Description |
+|---|---|---|
+| `IMU_ACCEL_FS_G` | `2` | Accelerometer full-scale range in g. Valid: `2`, `4`, `8`, `16`. Lower range = higher resolution. |
+| `IMU_GYRO_FS_DPS` | `250` | Gyroscope full-scale range in deg/s. Valid: `250`, `500`, `1000`, `2000`. |
+| `IMU_DLPF_CFG` | `3` | Digital Low-Pass Filter setting (0–6). `3` → 44 Hz accel / 42 Hz gyro cutoff. |
+
+### Display and timing
+
+| Parameter | Default | Description |
+|---|---|---|
+| `OLED_I2C_ADDRESS` | `0x3C` | SSD1306 I2C address. Change to `0x3D` if your display has the address jumper bridged. |
+| `OLED_RESULT_DWELL_MS` | `2500` | How long the upload result screen stays visible (ms) before returning to IDLE. |
+| `BTN_LONG_PRESS_MS` | `2000` | Hold duration (ms) required to trigger recording. |
+| `BTN_DEBOUNCE_MS` | `50` | Button debounce window (ms). Increase if you see spurious presses. |
+
+### Network
+
+| Parameter | Default | Description |
+|---|---|---|
+| `WIFI_CONNECT_TIMEOUT_MS` | `15000` | Maximum time to wait for a WiFi connection (ms). |
+| `EI_HTTP_TIMEOUT_MS` | `15000` | HTTP request timeout for uploads (ms). |
 
 ---
 
@@ -229,36 +282,50 @@ On power-up, the OLED shows the splash screen and the serial monitor prints:
 [INF][IMUSensor ] Initialised — accel ±2g  gyro ±250dps  sample rate 100Hz
 [INF][Main      ] Connecting to WiFi...
 [INF][Network   ] Connected — IP: 192.168.1.42  RSSI: -58 dBm
-[INF][Collector ] State: IDLE   Label: "standing"   WiFi: connected
-
-Serial commands: type "help" for a full list.
-Button (GPIO3): short press = cycle label | hold 2 s = start recording
-Recording    : also startable via serial command  start
+[INF][Collector ] Place device on a flat surface, then press the button to calibrate.
 ```
 
-### Step-by-Step: Collecting One Labeled Window
+The OLED then shows the **CALIBRATION** prompt screen (see below).
+
+### Step-by-Step: Calibrating and Collecting Data
 
 ```
-① Power on the device — the IDLE screen appears on the OLED.
+① Power on — OLED shows "CALIBRATION" prompt screen.
 
-② Press the label button (GPIO3) briefly to cycle through the activity labels:
+② Place the device on a stable, flat, level surface.
+
+③ Press the button once to start calibration.
+   The device collects 200 IMU samples (~2 s) to measure sensor bias.
+   Keep the device completely still during this time.
+   OLED shows a progress bar — do not touch the device.
+
+④ OLED briefly shows "IMU calibrated!" and then switches to the IDLE screen.
+   The IMU is now zeroed — gyro drift and accelerometer bias are removed.
+
+⑤ Press the button briefly (short press) to cycle through the activity labels:
      standing → walking → running → falling → standing → ...
    The label updates on the OLED immediately after each press.
 
-③ Select the correct label for the motion you are about to perform.
+⑥ Select the correct label for the motion you are about to perform.
 
-④ Start recording — choose either method:
-   • Hold the button for 2 seconds  (release when the OLED switches to RECORDING)
+⑦ Start recording — choose either method:
+   • Hold the button for 2 seconds  (OLED shows countdown, then switches to RECORDING)
    • Or type  start  in the serial monitor and press Enter
-   The LED blinks rapidly once recording begins.
 
-⑤ Perform the labelled activity for 5 seconds.
+⑧ After the long-press, a countdown appears on the OLED (2 → 1).
+   Get into position during this 2-second window.
 
-⑥ The device automatically stops, uploads the data to Edge Impulse,
+⑨ Perform the labelled activity for 10 seconds.
+   The LED blinks rapidly and a progress bar fills on the OLED.
+
+⑩ The device automatically stops, uploads the data to Edge Impulse,
    and shows UPLOAD OK or UPLOAD FAILED on the OLED.
 
-⑦ The OLED returns to the IDLE screen — repeat from step ② for the next window.
+⑪ The OLED returns to the IDLE screen — repeat from step ⑤ for the next window.
 ```
+
+> **Note:** Calibration only runs once at startup. If you move the device
+> significantly and want to recalibrate, press the **RESET** button to restart.
 
 > **To stop a recording early:** type `stop` in the serial monitor.
 > The firmware will upload however many samples were already captured.
@@ -268,6 +335,7 @@ Recording    : also startable via serial command  start
 - Collect at least **10 windows per label** for a usable dataset
 - Keep the sensor orientation consistent across all recordings of the same activity
 - Perform the activity naturally — the model learns from real motion patterns
+- Use the 2-second pre-recording countdown to get moving before capture starts
 - If an upload fails, check the serial monitor for the error message
 
 ---
@@ -275,6 +343,58 @@ Recording    : also startable via serial command  start
 ## Understanding the Display
 
 Each screen tells you exactly what the device is doing and what to do next.
+
+### CALIBRATION — Waiting for User Confirmation
+
+```
+┌──────────────────────────────┐
+│          CALIBRATION         │  ← centered state label (inverted bar)
+├──────────────────────────────┤
+│     Place device on          │
+│     a flat surface           │
+├──────────────────────────────┤
+│     Press btn to             │
+│     calibrate IMU            │
+└──────────────────────────────┘
+```
+
+**What to do:** Set the device on a flat, still surface. Then press the button once.
+
+---
+
+### CALIBRATING — Collecting Bias Samples
+
+```
+┌──────────────────────────────┐
+│          CALIBRATING         │  ← centered state label (inverted bar)
+├──────────────────────────────┤
+│[████████████████░░░░░░░░░░░] │  ← progress bar (fills over ~2 s)
+│                              │
+│       Keep still!            │
+│    Collecting data...        │
+└──────────────────────────────┘
+```
+
+**What to do:** Keep the device completely still until the screen changes.
+
+---
+
+### CALIBRATION OK — Complete
+
+```
+┌──────────────────────────────┐
+│        CALIBRATION OK        │  ← centered state label (inverted bar)
+├──────────────────────────────┤
+│      IMU calibrated!         │
+│       Bias removed           │
+├──────────────────────────────┤
+│        Starting...           │
+└──────────────────────────────┘
+```
+
+**What to do:** Nothing — the device transitions to IDLE automatically after 1.5 s.
+
+---
 
 ### IDLE — Waiting for Input
 
@@ -287,12 +407,31 @@ Each screen tells you exactly what the device is doing and what to do next.
 │                              │
 │ WiFi: 192.168.1.42           │  ← IP address
 ├──────────────────────────────┤
-│ Btn: cycle label             │  ← press button to change label
+│ Btn: next label              │  ← press button to change label
 │ Serial: 'start' cmd          │  ← type 'start' in serial monitor to record
 └──────────────────────────────┘
 ```
 
-**What to do:** Press the button briefly to change the label. Then either hold the button for 2 s or type `start` in the serial monitor to begin recording.
+**What to do:** Press the button briefly to change the label. Then either hold the
+button for 2 s or type `start` in the serial monitor to begin recording.
+
+---
+
+### GET READY — Pre-Recording Countdown
+
+```
+┌──────────────────────────────┐
+│GET READY         walking     │  ← state + current label (inverted bar)
+├──────────────────────────────┤
+│                              │
+│       Recording in:          │
+│                              │
+│              2               │  ← large countdown digit
+└──────────────────────────────┘
+```
+
+**What to do:** Get into position. Recording begins automatically when the countdown
+reaches zero (total delay = `RECORDING_START_DELAY_MS`, default 2 s).
 
 ---
 
@@ -303,14 +442,14 @@ Each screen tells you exactly what the device is doing and what to do next.
 │REC               walking     │  ← recording indicator + current label
 ├──────────────────────────────┤
 │[████████████████░░░░░░░░░░░] │  ← progress bar (fills as samples are collected)
-│ Samples: 350 / 500           │  ← samples so far / total target
-│ Time left: 2s                │  ← countdown
+│ Samples: 700 / 1000          │  ← samples so far / total target
+│ Time left: 3s                │  ← countdown
 ├──────────────────────────────┤
 │ Short: stop & upload         │  ← you can stop early if needed
 └──────────────────────────────┘
 ```
 
-**What to do:** Perform the activity naturally. The device stops automatically at 5 s.
+**What to do:** Perform the activity naturally. The device stops automatically at 10 s.
 
 ---
 
@@ -321,7 +460,7 @@ Each screen tells you exactly what the device is doing and what to do next.
 │          UPLOADING           │  ← centered state label
 ├──────────────────────────────┤
 │ Label:   walking             │
-│ Samples: 500                 │
+│ Samples: 1000                │
 │                              │
 │      Sending data to         │
 │      Edge Impulse...         │
@@ -339,7 +478,7 @@ Each screen tells you exactly what the device is doing and what to do next.
 │          UPLOAD OK           │  ← success header
 ├──────────────────────────────┤
 │ Label:   walking             │
-│ Samples: 500                 │
+│ Samples: 1000                │
 ├──────────────────────────────┤
 │   Sent to Edge Impulse!      │
 │   Returning to IDLE...       │
@@ -357,7 +496,7 @@ Each screen tells you exactly what the device is doing and what to do next.
 │        UPLOAD FAILED         │  ← failure header
 ├──────────────────────────────┤
 │ Label:   walking             │
-│ Samples: 500                 │
+│ Samples: 1000                │
 ├──────────────────────────────┤
 │ ERR_HTTP                     │  ← error code
 │ See serial monitor           │
@@ -394,7 +533,7 @@ Type a command and press **Enter**.
 | Command | What it does |
 |---|---|
 | `label:walking` | Set the active label (`standing`, `walking`, `running`, `falling`) |
-| `start` | Begin a 5-second recording (must be in IDLE) |
+| `start` | Begin a 10-second recording (must be in IDLE; skips the countdown) |
 | `stop` | Stop the current recording early and upload |
 | `status` | Print current state, label, and WiFi info |
 | `selftest` | Read 10 IMU samples — acceleration should be ~9.81 m/s² |
@@ -408,14 +547,17 @@ Type a command and press **Enter**.
 [INF][Collector] Label set to "running"
 
 > start
-[INF][Collector] Recording started — label: "running"  duration: 5s  rate: 100Hz
-[INF][Collector]   [running] 100 samples — 4s remaining
-[INF][Collector]   [running] 200 samples — 3s remaining
+[INF][Collector] Recording started — label: "running"  duration: 10s  rate: 100Hz
+[INF][Collector]   [running] 100 samples — 9s remaining
+[INF][Collector]   [running] 200 samples — 8s remaining
 ...
-[INF][Collector] Collection complete — 500 samples captured
+[INF][Collector] Collection complete — 1000 samples captured
 [INF][Collector] Uploading to Edge Impulse (label: "running")...
 [INF][Collector] Upload complete
 ```
+
+> **Note:** The `start` serial command skips the pre-recording countdown and begins
+> capturing immediately.
 
 ---
 
@@ -427,6 +569,7 @@ The onboard LED gives instant feedback without needing to watch the screen.
 |---|---|
 | Single 50 ms pulse every 3 s | **IDLE** — device is alive and waiting for a command |
 | Brief flash on button press | Label cycled — the OLED will confirm the new label |
+| Single flash before countdown | Recording countdown started — get into position |
 | Rapid on/off (every 5 samples) | **RECORDING** — collecting data |
 | Solid ON | **UPLOADING** — sending to Edge Impulse |
 | 3 slow blinks | Upload **succeeded** |
@@ -486,6 +629,7 @@ The onboard LED gives instant feedback without needing to watch the screen.
 ```
 
 The buffer size formula is `400 + (MAX_SAMPLES × 72)`.
+With the default 10-second window this is `400 + (1000 × 72) = 72 400 bytes`.
 Increase `JSON_PAYLOAD_MAX_BYTES` in `Config.h` if you see this error.
 
 ---
@@ -543,14 +687,24 @@ To change a setting, you edit exactly one file.
 exactly one of these states:
 
 ```
+                  ┌─────────────────────────────────────┐
+                  │           STARTUP (once)             │
+                  │  showCalibrationReady() →            │
+                  │  waitForButtonPress()  →             │
+                  │  runCalibration()                    │
+                  └──────────────────┬──────────────────┘
+                                     │
+                                     ▼
        short press (< 2 s) → cycle label
 IDLE ──────────────────────────────────────► IDLE
   │
   │  long press (≥ 2 s)  OR  serial: start
+  │
+  │  [2-second countdown on OLED]
   ▼
-COLLECTING ──► (5 s elapsed or buffer full) ──► UPLOADING ──► IDLE
-  │                                                            ▲
-  └──── serial command: stop ─────────────────────────────────┘
+COLLECTING ──► (10 s elapsed or buffer full) ──► UPLOADING ──► IDLE
+  │                                                             ▲
+  └──── serial command: stop ──────────────────────────────────┘
 ```
 
 `DataCollector::update()` is called on every `loop()` iteration. It:
@@ -560,17 +714,39 @@ COLLECTING ──► (5 s elapsed or buffer full) ──► UPLOADING ──► 
 
 ---
 
+### IMU Calibration
+
+At startup, before entering IDLE, the device performs a one-time bias calibration:
+
+1. **Prompt:** OLED shows "Place device on a flat surface — press button."
+2. **Confirm:** User places device flat and presses the button.
+3. **Collect:** `DataCollector::runCalibration()` reads `IMU_CALIB_SAMPLES` (200)
+   samples at 100 Hz (~2 s) while the device is stationary.
+4. **Compute:** Mean values are calculated for all six axes.
+   - Accel X, Y: offsets = mean (should be ≈ 0 → removes lateral bias)
+   - Accel Z: offset = mean − 9.80665 (removes bias while preserving gravity)
+   - Gyro X, Y, Z: offsets = mean (should be ≈ 0 → removes zero-rate drift)
+5. **Apply:** `IMUSensor::setOffsets()` stores the offsets; every subsequent
+   `readSample()` call subtracts them automatically.
+6. **Result:** OLED shows "IMU calibrated!" for 1.5 s, then transitions to IDLE.
+
+The calibration corrects for manufacturing tolerances and temperature-related drift.
+To recalibrate, press the **RESET** button to restart the device.
+
+---
+
 ### Module Descriptions
 
 #### `src/config/Config.h` — Central Configuration
 
-One header of `#define` constants — the only file students need to edit before flashing.
+One header of `#define` constants — the only file you need to edit before flashing.
 
 Key groups of settings:
 - **WiFi:** SSID, password, connection timeout
 - **Edge Impulse:** API key, device name, ingestion endpoint
 - **MPU6050:** I2C pins, full-scale ranges, digital filter, sample rate
-- **Collection:** recording duration (5 s), window size (500 samples)
+- **Collection:** recording duration (10 s), window size (1000 samples),
+  pre-recording countdown delay (2 s), calibration sample count (200)
 - **Display:** OLED I2C address, screen dimensions, result dwell time
 
 ---
@@ -582,7 +758,7 @@ A static-only utility class that formats log messages with a level tag and a mod
 ```
 [INF][Collector    ] Recording started — label: "walking"
 [ERR][IMUSensor    ] WHO_AM_I mismatch: expected 0x68, got 0xFF
-[DBG][EIClient     ] Payload built: 36412 bytes
+[DBG][EIClient     ] Payload built: 72412 bytes
 ```
 
 Log levels: `DEBUG < INFO < WARNING < ERROR < NONE`
@@ -599,8 +775,8 @@ Uses a **statically allocated** array — no heap allocation, no `std::vector`.
 
 ```cpp
 struct IMUSample {
-    float accX, accY, accZ;  // Acceleration [m/s²]
-    float gyrX, gyrY, gyrZ;  // Angular velocity [deg/s]
+    float accX, accY, accZ;  // Calibrated acceleration [m/s²]
+    float gyrX, gyrY, gyrZ;  // Calibrated angular velocity [deg/s]
 };
 ```
 
@@ -625,12 +801,17 @@ no third-party sensor library required.
 - Burst-reads 14 bytes from register `0x3B` in one I2C transaction
 - Reassembles big-endian 16-bit integers using a local lambda
 - Multiplies by scale factors to produce m/s² and deg/s
+- **Subtracts calibration offsets** (set to 0 until `setOffsets()` is called)
 
 **Scale factor formulas:**
 ```
 accelScale = 9.80665 / (16384 / FS_G)      // raw ADC → m/s²
 gyroScale  = 1.0 / (131 / (FS_DPS / 250))  // raw ADC → deg/s
 ```
+
+**Calibration (`setOffsets()`):**
+Stores per-axis bias values that are subtracted inside every `readSample()` call.
+Called once by `DataCollector::runCalibration()` during startup.
 
 ---
 
@@ -665,7 +846,7 @@ and POSTs it over HTTPS.
     ],
     "values": [
       [-0.12, 9.78, 0.05, 1.20, -0.30, 0.10],
-      ...500 rows total...
+      ...1000 rows total...
     ]
   }
 }
@@ -693,9 +874,25 @@ with overflow detection — no `std::string`, no dynamic resizing.
 Wraps the Adafruit SSD1306 library. Exposes one draw method per application state.
 All methods are safe no-ops if the display is not connected (`begin()` returned false).
 
+**Screen methods:**
+
+| Method | When shown |
+|---|---|
+| `showBoot()` | Power-on splash |
+| `showCalibrationReady()` | Waiting for user to confirm calibration |
+| `showCalibrating(progress)` | Calibration sample collection in progress |
+| `showCalibrationDone()` | Calibration complete — 1.5 s dwell |
+| `showIdle(label, wifi, ip)` | IDLE state — awaiting user input |
+| `showRecordingCountdown(label, s)` | Pre-recording countdown (one call per second) |
+| `showCollecting(label, n, total, t)` | Recording in progress |
+| `showUploading(label, n)` | HTTP upload in progress |
+| `showUploadResult(ok, label, n, err)` | Upload result — 2.5 s dwell |
+| `showError(msg)` | Fatal hardware error |
+
 **Private helpers:**
 - `printCentered(text, y, size)` — centres text horizontally at a given y coordinate
 - `drawHeaderBar(left, right)` — draws the inverted (white-fill, black-text) header bar
+- `drawProgressBar(x, y, w, h, ratio)` — draws a filled progress bar with border
 
 ---
 
@@ -704,6 +901,14 @@ All methods are safe no-ops if the display is not connected (`begin()` returned 
 The application's core logic. Orchestrates IMU reading, button input, serial commands,
 display updates, and upload sequencing.
 
+**`begin()` startup sequence:**
+1. Configure GPIO pins
+2. Show calibration prompt on OLED
+3. Block until user presses the button (`waitForButtonPress()`)
+4. Run IMU calibration (`runCalibration()`) — 200 samples, ~2 s
+5. Show calibration result briefly
+6. Show IDLE screen
+
 **`update()` is called every loop iteration and:**
 1. Polls the label button (GPIO3) with a two-stage debouncer
 2. Polls the serial port for text commands
@@ -711,13 +916,16 @@ display updates, and upload sequencing.
 
 **Button behaviour (IDLE state only):**
 - **Short press** (< `BTN_LONG_PRESS_MS` = 2000 ms) → cycle the active label
-- **Long press** (≥ 2 s, then release) → start recording (equivalent to serial `start`)
+- **Long press** (≥ 2 s, then release) → show pre-recording countdown, then record
 - The debouncer ignores transitions shorter than `BTN_DEBOUNCE_MS` (50 ms),
   preventing contact bounce from registering as multiple presses
 - All actions fire on **button release** (rising edge); press-start time is
   stamped on the falling edge to measure hold duration
 
-**Starting / stopping a recording:** button long-press, or serial commands `start` / `stop`
+**Pre-recording countdown:**
+After a long-press, `startRecording()` shows a per-second countdown
+(`RECORDING_START_DELAY_MS / 1000` seconds) on the OLED before actual data
+capture begins. This gives the user time to get into position.
 
 ---
 
@@ -733,7 +941,7 @@ setup()
   ├─ display.begin()                initialise OLED (safe to skip if not attached)
   ├─ imu.begin()                    initialise MPU6050 — HALT on failure
   ├─ NetworkManager::connect()      connect to WiFi — warn and continue offline
-  └─ collector.begin()              show initial IDLE screen
+  └─ collector.begin()              calibration sequence → show initial IDLE screen
 
 loop()
   └─ collector.update()             non-blocking, returns immediately every iteration
@@ -765,6 +973,7 @@ and appears in the same place every time.
 | **`static_cast`** | Numeric conversions throughout | Explicit, readable type conversions |
 | **Operator overloading** | `SampleBuffer::operator[]` | Natural array-style element access |
 | **`switch` on scoped enum** | State dispatch in `update()` | Clean, exhaustive state handling |
+| **Array member initializer** | `m_accelOffsets{0,0,0}` in `IMUSensor` | C++11 brace-initialization of array members |
 
 ---
 

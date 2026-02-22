@@ -89,6 +89,15 @@ private:
     void handleCollecting();
     void handleUploading();
 
+    // -- Startup helpers ------------------------------------------------------
+    /// Blocking wait for the user button to be pressed and released.
+    /// Used during calibration prompt in begin().
+    void waitForButtonPress();
+
+    /// Collect IMU_CALIB_SAMPLES samples, compute mean bias offsets, and apply
+    /// them to the IMU sensor via setOffsets().  Shows progress on the OLED.
+    void runCalibration();
+
     // -- Input ----------------------------------------------------------------
     void pollButton();
     void pollSerial();

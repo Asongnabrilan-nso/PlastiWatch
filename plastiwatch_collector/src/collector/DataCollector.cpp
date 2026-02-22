@@ -40,6 +40,16 @@ void DataCollector::begin() {
     pinMode(STATUS_LED_PIN,  OUTPUT);
     setLed(false);
 
+    // ── Calibration prompt ──────────────────────────────────────────────────
+    Logger::info(TAG, "Place device on a flat surface, then press the button to calibrate.");
+    m_display.showCalibrationReady();
+    waitForButtonPress();
+
+    // ── IMU calibration ─────────────────────────────────────────────────────
+    Logger::info(TAG, "Calibrating IMU — keep device still...");
+    runCalibration();
+
+    // ── Normal startup ───────────────────────────────────────────────────────
     printBanner();
     printStatus();
 
@@ -306,6 +316,22 @@ void DataCollector::startRecording() {
     }
 
     m_buffer.clear();
+
+    // ── Pre-recording countdown ──────────────────────────────────────────────
+    // Show a per-second countdown so the user can position themselves before
+    // data capture begins.  Total delay = RECORDING_START_DELAY_MS.
+    {
+        blinkLed(1, 100);
+        const uint32_t totalSecs = RECORDING_START_DELAY_MS / 1000;
+        Logger::infof(TAG,
+            "Recording starting in %u s — label: \"%s\"", totalSecs, activeLabel());
+        for (uint32_t s = totalSecs; s >= 1; s--) {
+            m_display.showRecordingCountdown(activeLabel(), s);
+            delay(1000);
+        }
+    }
+
+    // ── Begin actual data capture ────────────────────────────────────────────
     m_state            = CollectorState::COLLECTING;
     m_sampleDeadlineMs = millis();
     m_collectionEndMs  = millis() + (COLLECTION_DURATION_S * 1000UL);
@@ -336,6 +362,71 @@ void DataCollector::cycleLabel() {
                        NetworkManager::localIP().c_str());
     m_lastIdleDisplayMs = millis();
     blinkLed(1, 100);
+}
+
+// =============================================================================
+// Startup helpers
+// =============================================================================
+
+void DataCollector::waitForButtonPress() {
+    // Drain any residual LOW (button may still be held from power-on)
+    while (digitalRead(LABEL_BTN_PIN) == LOW) delay(10);
+    delay(BTN_DEBOUNCE_MS);
+
+    // Wait for a clean press (stable LOW)
+    while (digitalRead(LABEL_BTN_PIN) == HIGH) delay(10);
+    delay(BTN_DEBOUNCE_MS);
+
+    // Wait for release (stable HIGH) — action fires on rising edge
+    while (digitalRead(LABEL_BTN_PIN) == LOW) delay(10);
+    delay(BTN_DEBOUNCE_MS);
+
+    Logger::info(TAG, "Button press confirmed");
+}
+
+void DataCollector::runCalibration() {
+    const uint16_t numSamples = IMU_CALIB_SAMPLES;
+    float sumAx = 0.0f, sumAy = 0.0f, sumAz = 0.0f;
+    float sumGx = 0.0f, sumGy = 0.0f, sumGz = 0.0f;
+    uint16_t collected = 0;
+
+    m_display.showCalibrating(0.0f);
+
+    while (collected < numSamples) {
+        IMUSample s;
+        if (m_imu.readSample(s)) {
+            sumAx += s.accX;  sumAy += s.accY;  sumAz += s.accZ;
+            sumGx += s.gyrX;  sumGy += s.gyrY;  sumGz += s.gyrZ;
+            collected++;
+        }
+        // Refresh progress bar every 10 samples (~100 ms)
+        if (collected % 10 == 0) {
+            m_display.showCalibrating(
+                static_cast<float>(collected) / static_cast<float>(numSamples));
+        }
+        delay(SAMPLE_INTERVAL_MS);
+    }
+
+    // Mean bias for each axis.
+    // AccZ offset = mean − gravity so that a flat device reads ≈ 0 on Z
+    // after the offset, keeping the gravity component intact for all poses.
+    const float n    = static_cast<float>(numSamples);
+    const float offAx = sumAx / n;
+    const float offAy = sumAy / n;
+    const float offAz = sumAz / n - 9.80665f;   // remove bias, preserve gravity
+    const float offGx = sumGx / n;
+    const float offGy = sumGy / n;
+    const float offGz = sumGz / n;
+
+    m_imu.setOffsets(offAx, offAy, offAz, offGx, offGy, offGz);
+
+    Logger::infof(TAG,
+        "Calibration complete — acc bias [%.3f, %.3f, %.3f] m/s²"
+        "  gyr bias [%.3f, %.3f, %.3f] dps",
+        offAx, offAy, offAz, offGx, offGy, offGz);
+
+    m_display.showCalibrationDone();
+    delay(1500);  // Brief dwell so user sees confirmation
 }
 
 // =============================================================================

@@ -13,7 +13,11 @@ static const char* TAG = "IMUSensor";
 // =============================================================================
 
 IMUSensor::IMUSensor()
-    : m_ready(false), m_accelScale(0.0f), m_gyroScale(0.0f)
+    : m_ready(false)
+    , m_accelScale(0.0f)
+    , m_gyroScale(0.0f)
+    , m_accelOffsets{0.0f, 0.0f, 0.0f}
+    , m_gyroOffsets{0.0f, 0.0f, 0.0f}
 {}
 
 // =============================================================================
@@ -112,14 +116,31 @@ bool IMUSensor::readSample(IMUSample& out) {
     int16_t rawGy = toInt16(buf[10], buf[11]);
     int16_t rawGz = toInt16(buf[12], buf[13]);
 
-    out.accX = static_cast<float>(rawAx) * m_accelScale;
-    out.accY = static_cast<float>(rawAy) * m_accelScale;
-    out.accZ = static_cast<float>(rawAz) * m_accelScale;
-    out.gyrX = static_cast<float>(rawGx) * m_gyroScale;
-    out.gyrY = static_cast<float>(rawGy) * m_gyroScale;
-    out.gyrZ = static_cast<float>(rawGz) * m_gyroScale;
+    out.accX = static_cast<float>(rawAx) * m_accelScale - m_accelOffsets[0];
+    out.accY = static_cast<float>(rawAy) * m_accelScale - m_accelOffsets[1];
+    out.accZ = static_cast<float>(rawAz) * m_accelScale - m_accelOffsets[2];
+    out.gyrX = static_cast<float>(rawGx) * m_gyroScale  - m_gyroOffsets[0];
+    out.gyrY = static_cast<float>(rawGy) * m_gyroScale  - m_gyroOffsets[1];
+    out.gyrZ = static_cast<float>(rawGz) * m_gyroScale  - m_gyroOffsets[2];
 
     return true;
+}
+
+// =============================================================================
+// setOffsets()
+// =============================================================================
+
+void IMUSensor::setOffsets(float ax, float ay, float az,
+                           float gx, float gy, float gz) {
+    m_accelOffsets[0] = ax;
+    m_accelOffsets[1] = ay;
+    m_accelOffsets[2] = az;
+    m_gyroOffsets[0]  = gx;
+    m_gyroOffsets[1]  = gy;
+    m_gyroOffsets[2]  = gz;
+    Logger::infof(TAG,
+        "Offsets applied — acc [%.3f, %.3f, %.3f] m/s²  gyr [%.3f, %.3f, %.3f] dps",
+        ax, ay, az, gx, gy, gz);
 }
 
 // =============================================================================
