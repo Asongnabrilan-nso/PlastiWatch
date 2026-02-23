@@ -2,19 +2,25 @@
 // DataCollector.h — PlastiWatch: High-level Collection State Machine
 //
 // Orchestrates the full data collection cycle:
-//   IDLE → COLLECTING → UPLOADING → IDLE
+//   IDLE → COLLECTING → UPLOADING → COLLECTING → ... → IDLE
+//
+// Once recording starts, each 10-second window is uploaded automatically and
+// the next window begins immediately — no pause, no button press needed.
+// Press the button (or send "stop") at any time to end the session and return
+// to IDLE after the current upload completes.
 //
 // Trigger modes
-//   Hardware : Short press (< 2 s) — cycle the active label.
-//              Long press  (≥ 2 s) — start recording (same as serial "start").
+//   Hardware : Short press (< 2 s) — cycle the active label (IDLE only).
+//              Long press  (≥ 2 s) — start continuous recording session.
+//              Any press during COLLECTING — stop after current window upload.
 //              The button uses the ESP32-C3 internal pull-up resistor — no
 //              external resistor needed.  Logic is active LOW (pressed = LOW).
 //   Serial   : Commands entered in the serial monitor.
 //
 // Serial commands (send with newline):
 //   label:<name>   — set active label  (e.g. "label:running")
-//   start          — begin recording
-//   stop           — stop recording early and upload
+//   start          — begin continuous recording session
+//   stop           — finish current window, upload, then return to IDLE
 //   status         — print current state and label
 //   selftest       — run IMU self-test
 //   help           — list available commands
@@ -65,6 +71,10 @@ private:
     CollectorState m_state;
     uint8_t        m_labelIndex;
 
+    /// True while in a continuous recording session (auto-restart after each
+    /// window).  Set by startRecording(); cleared by stopAndUpload().
+    bool           m_continuousMode;
+
     // -- Timing ---------------------------------------------------------------
     unsigned long m_sampleDeadlineMs;   ///< Next sample due timestamp
     unsigned long m_collectionEndMs;    ///< When to stop collecting
@@ -104,8 +114,9 @@ private:
     void processSerialCommand(const String& cmd);
 
     // -- Actions --------------------------------------------------------------
-    void startRecording();
-    void stopAndUpload();
+    void startRecording();    ///< First window — shows countdown, sets continuous mode
+    void restartRecording();  ///< Subsequent windows — no countdown, no WiFi check
+    void stopAndUpload();     ///< End session: clears continuous mode, triggers upload
     void cycleLabel();
 
     // -- UI helpers -----------------------------------------------------------

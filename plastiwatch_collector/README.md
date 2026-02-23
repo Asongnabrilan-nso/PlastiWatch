@@ -40,8 +40,9 @@ Step 4 → Power on → place flat → press button to calibrate IMU
 Step 5 → Press button to pick label, long-press (2 s) to start recording
 ```
 
-That's it. The device calibrates itself, then records 1000 IMU samples (10 s) and
-uploads them automatically.
+That's it. The device calibrates itself, then records 1000 IMU samples (10 s),
+uploads them, and immediately starts the next window — continuously collecting data
+until you press the button to stop.
 
 ---
 
@@ -54,7 +55,7 @@ uploads them automatically.
 | Seeed Studio XIAO ESP32C3 | The microcontroller board |
 | MPU6050 IMU module | 6-axis (accelerometer + gyroscope) |
 | SSD1306 OLED display (128×64) | I2C interface |
-| Tactile push button | Momentary — short press cycles label; long press starts recording |
+| Tactile push button | Momentary — short press cycles label; long press starts continuous recording session |
 | Jumper wires | Female-to-female for breadboard |
 | Breadboard | Optional but recommended |
 | USB-C data cable | **Must support data** — charge-only cables won't work |
@@ -103,7 +104,7 @@ GND        ─────────────── Button leg B
 |---|---|
 | 3.3V | MPU6050 VCC **and** OLED VCC |
 | GND | MPU6050 GND **and** OLED GND **and** button leg B |
-| D3 (GPIO3) | Button leg A — short press cycles label; hold 2 s starts recording |
+| D3 (GPIO3) | Button leg A — short press cycles label; hold 2 s starts continuous session; press during recording stops session |
 | D4 (GPIO6) | MPU6050 SDA **and** OLED SDA |
 | D5 (GPIO7) | MPU6050 SCL **and** OLED SCL |
 | *(MPU6050 AD0)* | GND — sets I2C address to 0x68 |
@@ -308,35 +309,47 @@ The OLED then shows the **CALIBRATION** prompt screen (see below).
 
 ⑥ Select the correct label for the motion you are about to perform.
 
-⑦ Start recording — choose either method:
+⑦ Start a continuous recording session — choose either method:
    • Hold the button for 2 seconds  (OLED shows countdown, then switches to RECORDING)
    • Or type  start  in the serial monitor and press Enter
 
-⑧ After the long-press, a countdown appears on the OLED (2 → 1).
-   Get into position during this 2-second window.
+⑧ After the long-press, a 2-second countdown appears on the OLED (2 → 1).
+   Get into position during this window — recording starts at zero.
 
 ⑨ Perform the labelled activity for 10 seconds.
    The LED blinks rapidly and a progress bar fills on the OLED.
 
-⑩ The device automatically stops, uploads the data to Edge Impulse,
-   and shows UPLOAD OK or UPLOAD FAILED on the OLED.
+⑩ The device automatically uploads the window to Edge Impulse,
+   shows UPLOAD OK or UPLOAD FAILED briefly, then immediately starts
+   the NEXT 10-second window — no button press needed.
+   The cycle repeats indefinitely, uploading each window as it completes.
 
-⑪ The OLED returns to the IDLE screen — repeat from step ⑤ for the next window.
+⑪ To end the session: press the button OR type  stop  in the serial monitor.
+   The current window finishes, uploads, and the OLED returns to IDLE.
+   You can then change the label (step ⑤) or start a new session (step ⑦).
 ```
 
 > **Note:** Calibration only runs once at startup. If you move the device
 > significantly and want to recalibrate, press the **RESET** button to restart.
 
-> **To stop a recording early:** type `stop` in the serial monitor.
-> The firmware will upload however many samples were already captured.
+> **Countdown only appears once** — at the very start of a session. Subsequent
+> windows begin immediately after each upload so data collection is uninterrupted.
+
+> **To stop the session mid-window:** press the button or type `stop`.
+> The firmware uploads however many samples were captured in the current window,
+> then returns to IDLE.
 
 ### Tips for Good Data
 
-- Collect at least **10 windows per label** for a usable dataset
+- Let the device run for several **continuous minutes per label** — it uploads each
+  10-second window automatically, so you accumulate a large dataset without stopping
 - Keep the sensor orientation consistent across all recordings of the same activity
 - Perform the activity naturally — the model learns from real motion patterns
-- Use the 2-second pre-recording countdown to get moving before capture starts
-- If an upload fails, check the serial monitor for the error message
+- Use the 2-second pre-recording countdown (first window only) to get into position
+- If an upload fails, the serial monitor shows the error code; the session continues
+  with the next window on the next attempt
+- To switch labels, press the button to end the session, cycle the label with short
+  presses, then long-press again to start a new continuous session
 
 ---
 
@@ -533,8 +546,8 @@ Type a command and press **Enter**.
 | Command | What it does |
 |---|---|
 | `label:walking` | Set the active label (`standing`, `walking`, `running`, `falling`) |
-| `start` | Begin a 10-second recording (must be in IDLE; skips the countdown) |
-| `stop` | Stop the current recording early and upload |
+| `start` | Begin a continuous recording session (must be in IDLE; windows repeat automatically) |
+| `stop` | End the continuous session: finish current window, upload it, return to IDLE |
 | `status` | Print current state, label, and WiFi info |
 | `selftest` | Read 10 IMU samples — acceleration should be ~9.81 m/s² |
 | `imuconfig` | Print all MPU6050 register values (for debugging) |
@@ -547,17 +560,26 @@ Type a command and press **Enter**.
 [INF][Collector] Label set to "running"
 
 > start
-[INF][Collector] Recording started — label: "running"  duration: 10s  rate: 100Hz
+[INF][Collector] Continuous recording starting in 2 s — label: "running"  (press button to stop)
+[INF][Collector] Window 1 started — label: "running"  duration: 10s  rate: 100Hz
 [INF][Collector]   [running] 100 samples — 9s remaining
 [INF][Collector]   [running] 200 samples — 8s remaining
 ...
 [INF][Collector] Collection complete — 1000 samples captured
 [INF][Collector] Uploading to Edge Impulse (label: "running")...
 [INF][Collector] Upload complete
+[INF][Collector] Continuous session: auto-starting next window
+[INF][Collector] Next window started — label: "running"  duration: 10s  (press button to stop)
+[INF][Collector]   [running] 100 samples — 9s remaining
+...
+
+> stop
+[INF][Collector] Session stopped — uploading N samples then returning to IDLE
+[INF][Collector] Upload complete
 ```
 
 > **Note:** The `start` serial command skips the pre-recording countdown and begins
-> capturing immediately.
+> capturing immediately. Each subsequent window also starts without a countdown.
 
 ---
 
@@ -699,12 +721,20 @@ exactly one of these states:
 IDLE ──────────────────────────────────────► IDLE
   │
   │  long press (≥ 2 s)  OR  serial: start
+  │  [2-second countdown on OLED — first window only]
   │
-  │  [2-second countdown on OLED]
   ▼
-COLLECTING ──► (10 s elapsed or buffer full) ──► UPLOADING ──► IDLE
-  │                                                             ▲
-  └──── serial command: stop ──────────────────────────────────┘
+COLLECTING ──► (10 s elapsed or buffer full)
+  │                     │
+  │  button press        │
+  │  OR serial: stop     ▼
+  │              UPLOADING ──► (continuous mode?) ──YES──► COLLECTING (next window)
+  │                  │                                           ↑
+  │                  │ NO (session stopped)                      │
+  └──────────────────┘                                           │
+                       │                         (loop until button / stop)
+                       ▼
+                      IDLE
 ```
 
 `DataCollector::update()` is called on every `loop()` iteration. It:
@@ -914,18 +944,23 @@ display updates, and upload sequencing.
 2. Polls the serial port for text commands
 3. Dispatches to `handleIdle()`, `handleCollecting()`, or `handleUploading()`
 
-**Button behaviour (IDLE state only):**
-- **Short press** (< `BTN_LONG_PRESS_MS` = 2000 ms) → cycle the active label
-- **Long press** (≥ 2 s, then release) → show pre-recording countdown, then record
+**Button behaviour:**
+- **IDLE — Short press** (< `BTN_LONG_PRESS_MS` = 2000 ms) → cycle the active label
+- **IDLE — Long press** (≥ 2 s, then release) → show countdown, start continuous session
+- **COLLECTING — Any press** → end continuous session; current window is uploaded,
+  then the device returns to IDLE (no new window starts)
 - The debouncer ignores transitions shorter than `BTN_DEBOUNCE_MS` (50 ms),
   preventing contact bounce from registering as multiple presses
 - All actions fire on **button release** (rising edge); press-start time is
   stamped on the falling edge to measure hold duration
 
-**Pre-recording countdown:**
-After a long-press, `startRecording()` shows a per-second countdown
-(`RECORDING_START_DELAY_MS / 1000` seconds) on the OLED before actual data
-capture begins. This gives the user time to get into position.
+**Continuous recording session:**
+`startRecording()` sets `m_continuousMode = true` and shows a per-second countdown
+(first window only). After each window, `handleUploading()` checks the flag:
+if still set it calls `restartRecording()` (no countdown) immediately; if cleared
+(user stopped the session) it transitions to IDLE. The flag is cleared by
+`stopAndUpload()`, which is called on button press during COLLECTING or on the
+serial `stop` command.
 
 ---
 

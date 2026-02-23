@@ -19,6 +19,7 @@ DataCollector::DataCollector(IMUSensor& imu, OLEDDisplay& display)
     , m_display(display)
     , m_state(CollectorState::IDLE)
     , m_labelIndex(0)
+    , m_continuousMode(false)
     , m_sampleDeadlineMs(0)
     , m_collectionEndMs(0)
     , m_lastProgressMs(0)
@@ -176,15 +177,25 @@ void DataCollector::handleUploading() {
     delay(OLED_RESULT_DWELL_MS);
 
     m_buffer.clear();
-    m_state = CollectorState::IDLE;
     setLed(false);
-    printStatus();
 
-    // Immediately refresh idle screen (don't wait for the 5-second timer)
-    m_display.showIdle(activeLabel(),
-                       NetworkManager::isConnected(),
-                       NetworkManager::localIP().c_str());
-    m_lastIdleDisplayMs = millis();
+    if (m_continuousMode) {
+        // Session is still active — jump straight into the next window.
+        // No countdown or WiFi re-check; button press cleared the flag already
+        // if the user wants to stop.
+        Logger::info(TAG, "Continuous session: auto-starting next window");
+        restartRecording();
+    } else {
+        // Session ended (user pressed button or sent 'stop') — return to IDLE.
+        m_state = CollectorState::IDLE;
+        printStatus();
+
+        // Immediately refresh idle screen (don't wait for the 5-second timer)
+        m_display.showIdle(activeLabel(),
+                           NetworkManager::isConnected(),
+                           NetworkManager::localIP().c_str());
+        m_lastIdleDisplayMs = millis();
+    }
 }
 
 // =============================================================================
@@ -214,10 +225,15 @@ void DataCollector::pollButton() {
         m_btnDebounced = false;
         if (m_state == CollectorState::IDLE) {
             if (now - m_btnPressStartMs >= BTN_LONG_PRESS_MS) {
-                startRecording();   // long press (≥ 2 s)
+                startRecording();   // long press (≥ 2 s) — start session
             } else {
                 cycleLabel();       // short press — cycle label
             }
+        } else if (m_state == CollectorState::COLLECTING) {
+            // Any press during recording ends the continuous session.
+            // The current window is uploaded and the device returns to IDLE.
+            Logger::info(TAG, "Button pressed — stopping continuous session after this window");
+            stopAndUpload();
         }
     }
 
@@ -285,8 +301,8 @@ void DataCollector::processSerialCommand(const String& cmd) {
     } else if (cmd.equalsIgnoreCase("help")) {
         Serial.println("\nAvailable commands:");
         Serial.println("  label:<name>  — set label (standing|walking|running|falling)");
-        Serial.println("  start         — begin recording");
-        Serial.println("  stop          — stop early and upload");
+        Serial.println("  start         — begin continuous recording (windows repeat until stopped)");
+        Serial.println("  stop          — finish current window, upload, then return to IDLE");
         Serial.println("  status        — show current state");
         Serial.println("  selftest      — run IMU self-test");
         Serial.println("  imuconfig     — print IMU register values");
@@ -315,16 +331,18 @@ void DataCollector::startRecording() {
         }
     }
 
+    m_continuousMode = true;  // Enable auto-restart after each window
     m_buffer.clear();
 
     // ── Pre-recording countdown ──────────────────────────────────────────────
     // Show a per-second countdown so the user can position themselves before
-    // data capture begins.  Total delay = RECORDING_START_DELAY_MS.
+    // the first window begins.  Subsequent windows start without a countdown.
     {
         blinkLed(1, 100);
         const uint32_t totalSecs = RECORDING_START_DELAY_MS / 1000;
         Logger::infof(TAG,
-            "Recording starting in %u s — label: \"%s\"", totalSecs, activeLabel());
+            "Continuous recording starting in %u s — label: \"%s\"  (press button to stop)",
+            totalSecs, activeLabel());
         for (uint32_t s = totalSecs; s >= 1; s--) {
             m_display.showRecordingCountdown(activeLabel(), s);
             delay(1000);
@@ -338,7 +356,7 @@ void DataCollector::startRecording() {
     m_lastProgressMs   = millis();
 
     Logger::infof(TAG,
-        "Recording started — label: \"%s\"  duration: %d s  rate: %d Hz",
+        "Window 1 started — label: \"%s\"  duration: %d s  rate: %d Hz",
         activeLabel(), COLLECTION_DURATION_S, SAMPLE_RATE_HZ);
 
     // Show collecting screen immediately so the user sees feedback
@@ -347,9 +365,29 @@ void DataCollector::startRecording() {
     blinkLed(2, 150);
 }
 
+void DataCollector::restartRecording() {
+    // Called automatically after each window upload when in continuous mode.
+    // No countdown, no WiFi re-check — just clear the buffer and go.
+    m_buffer.clear();
+    m_state            = CollectorState::COLLECTING;
+    m_sampleDeadlineMs = millis();
+    m_collectionEndMs  = millis() + (COLLECTION_DURATION_S * 1000UL);
+    m_lastProgressMs   = millis();
+
+    Logger::infof(TAG,
+        "Next window started — label: \"%s\"  duration: %d s  (press button to stop)",
+        activeLabel(), COLLECTION_DURATION_S);
+
+    m_display.showCollecting(activeLabel(), 0, SampleBuffer::CAPACITY,
+                             COLLECTION_DURATION_S);
+    blinkLed(2, 150);
+}
+
 void DataCollector::stopAndUpload() {
-    Logger::infof(TAG, "Recording stopped early — %u samples", m_buffer.count());
-    m_collectionEndMs = millis();  // Force handleCollecting to transition
+    Logger::infof(TAG, "Session stopped — uploading %u samples then returning to IDLE",
+        m_buffer.count());
+    m_continuousMode  = false;    // Exit continuous session after this upload
+    m_collectionEndMs = millis(); // Force handleCollecting to transition now
 }
 
 void DataCollector::cycleLabel() {
@@ -442,8 +480,8 @@ void DataCollector::printBanner() const {
     Logger::infof(TAG, "  Device      : %s", EI_DEVICE_NAME);
     Logger::separator('=');
     Serial.println("\nSerial commands: type \"help\" for a full list.");
-    Serial.println("Button (GPIO3): short press = cycle label | hold 2 s = start recording");
-    Serial.println("Recording    : also startable via serial command  start\n");
+    Serial.println("Button (GPIO3): short press = cycle label | hold 2 s = start continuous session");
+    Serial.println("During recording: press button OR send 'stop' to end session after current window\n");
 }
 
 void DataCollector::printStatus() const {

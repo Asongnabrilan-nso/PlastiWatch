@@ -9,8 +9,8 @@
 // -----------------------------------------------------------------------------
 // WiFi
 // -----------------------------------------------------------------------------
-#define WIFI_SSID                   "Hardware Community 2.4"
-#define WIFI_PASSWORD               "ko67!aM3uYU!BDK"
+#define WIFI_SSID                   "levon" //"Hardware Community 2.4"
+#define WIFI_PASSWORD               "levonrobotics" //"ko67!aM3uYU!BDK"
 #define WIFI_CONNECT_TIMEOUT_MS     15000   ///< Max time to establish connection
 #define WIFI_RECONNECT_INTERVAL_MS  5000    ///< Delay between reconnect attempts
 
